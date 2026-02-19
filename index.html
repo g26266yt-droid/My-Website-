@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>K-Map Solver (2,3,4 Variables + Don't Care)</title>
+<style>
+body{
+    font-family: Arial;
+    text-align:center;
+    background:#f2f2f2;
+}
+table{
+    margin:20px auto;
+    border-collapse:collapse;
+}
+td,th{
+    border:2px solid black;
+    width:60px;
+    height:60px;
+    font-size:20px;
+    cursor:pointer;
+}
+td:hover{
+    background:#ddd;
+}
+button,select{
+    padding:8px;
+    margin:5px;
+}
+#result{
+    font-size:20px;
+    font-weight:bold;
+    color:darkblue;
+}
+.xcell{
+    color:red;
+    font-weight:bold;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Karnaugh Map Solver</h2>
+<p>Click cell: 0 → 1 → X (Don't Care)</p>
+
+<select id="varSelect" onchange="generateMap()">
+<option value="2">2 Variables</option>
+<option value="3">3 Variables</option>
+<option value="4">4 Variables</option>
+</select>
+
+<div id="mapArea"></div>
+
+<button onclick="solve()">Solve</button>
+<button onclick="resetMap()">Reset</button>
+
+<div id="result"></div>
+
+<script>
+
+let variables = 2;
+let values = [];
+
+function generateMap(){
+    variables = parseInt(document.getElementById("varSelect").value);
+    let total = Math.pow(2,variables);
+    values = Array(total).fill("0");
+
+    let mapHTML = "<table>";
+
+    if(variables==2){
+        mapHTML += `
+        <tr><th>A\\B</th><th>0</th><th>1</th></tr>
+        <tr><th>0</th>
+        <td onclick="toggle(this,0)">0</td>
+        <td onclick="toggle(this,1)">0</td></tr>
+        <tr><th>1</th>
+        <td onclick="toggle(this,2)">0</td>
+        <td onclick="toggle(this,3)">0</td></tr>`;
+    }
+
+    if(variables==3){
+        mapHTML += `
+        <tr><th>AB\\C</th><th>0</th><th>1</th></tr>
+        <tr><th>00</th>
+        <td onclick="toggle(this,0)">0</td>
+        <td onclick="toggle(this,1)">0</td></tr>
+        <tr><th>01</th>
+        <td onclick="toggle(this,2)">0</td>
+        <td onclick="toggle(this,3)">0</td></tr>
+        <tr><th>11</th>
+        <td onclick="toggle(this,6)">0</td>
+        <td onclick="toggle(this,7)">0</td></tr>
+        <tr><th>10</th>
+        <td onclick="toggle(this,4)">0</td>
+        <td onclick="toggle(this,5)">0</td></tr>`;
+    }
+
+    if(variables==4){
+        mapHTML += `
+        <tr><th>AB\\CD</th><th>00</th><th>01</th><th>11</th><th>10</th></tr>
+        <tr><th>00</th>
+        <td onclick="toggle(this,0)">0</td>
+        <td onclick="toggle(this,1)">0</td>
+        <td onclick="toggle(this,3)">0</td>
+        <td onclick="toggle(this,2)">0</td></tr>
+        <tr><th>01</th>
+        <td onclick="toggle(this,4)">0</td>
+        <td onclick="toggle(this,5)">0</td>
+        <td onclick="toggle(this,7)">0</td>
+        <td onclick="toggle(this,6)">0</td></tr>
+        <tr><th>11</th>
+        <td onclick="toggle(this,12)">0</td>
+        <td onclick="toggle(this,13)">0</td>
+        <td onclick="toggle(this,15)">0</td>
+        <td onclick="toggle(this,14)">0</td></tr>
+        <tr><th>10</th>
+        <td onclick="toggle(this,8)">0</td>
+        <td onclick="toggle(this,9)">0</td>
+        <td onclick="toggle(this,11)">0</td>
+        <td onclick="toggle(this,10)">0</td></tr>`;
+    }
+
+    mapHTML += "</table>";
+    document.getElementById("mapArea").innerHTML = mapHTML;
+    document.getElementById("result").innerHTML="";
+}
+
+function toggle(cell,index){
+    if(values[index]=="0"){
+        values[index]="1";
+        cell.innerText="1";
+        cell.classList.remove("xcell");
+    }
+    else if(values[index]=="1"){
+        values[index]="X";
+        cell.innerText="X";
+        cell.classList.add("xcell");
+    }
+    else{
+        values[index]="0";
+        cell.innerText="0";
+        cell.classList.remove("xcell");
+    }
+}
+
+function solve(){
+    let minterms=[];
+    let dontcares=[];
+
+    for(let i=0;i<values.length;i++){
+        if(values[i]=="1") minterms.push(i);
+        if(values[i]=="X") dontcares.push(i);
+    }
+
+    if(minterms.length==0){
+        document.getElementById("result").innerText="F = 0";
+        return;
+    }
+
+    let expr = simplifyQM(minterms.concat(dontcares), variables, minterms);
+    document.getElementById("result").innerHTML="F = "+expr;
+}
+
+function simplifyQM(allTerms, vars, requiredMinterms){
+
+    function toBinary(n){ return n.toString(2).padStart(vars,'0'); }
+
+    let terms = allTerms.map(m=>toBinary(m));
+    let simplified=[];
+
+    while(terms.length>0){
+        let grouped={};
+        terms.forEach(t=>{
+            let ones = t.split('1').length-1;
+            if(!grouped[ones]) grouped[ones]=[];
+            grouped[ones].push(t);
+        });
+
+        let newTerms=[];
+        let marked=new Set();
+
+        Object.keys(grouped).forEach(k=>{
+            let g1=grouped[k];
+            let g2=grouped[parseInt(k)+1];
+            if(!g2) return;
+
+            g1.forEach(t1=>{
+                g2.forEach(t2=>{
+                    let diff=0,pos=-1;
+                    for(let i=0;i<vars;i++){
+                        if(t1[i]!=t2[i]){
+                            diff++; pos=i;
+                        }
+                    }
+                    if(diff==1){
+                        marked.add(t1);
+                        marked.add(t2);
+                        let merged=t1.split('');
+                        merged[pos]='-';
+                        newTerms.push(merged.join(''));
+                    }
+                });
+            });
+        });
+
+        terms.forEach(t=>{
+            if(!marked.has(t)) simplified.push(t);
+        });
+
+        terms=[...new Set(newTerms)];
+    }
+
+    function termToExpr(term){
+        let letters=['A','B','C','D'];
+        let out="";
+        for(let i=0;i<term.length;i++){
+            if(term[i]=='1') out+=letters[i];
+            if(term[i]=='0') out+=letters[i]+"'";
+        }
+        return out;
+    }
+
+    return simplified.map(t=>termToExpr(t)).join(" + ");
+}
+
+function resetMap(){
+    generateMap();
+}
+
+generateMap();
+
+</script>
+
+</body>
+</html>
